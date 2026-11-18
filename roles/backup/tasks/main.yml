@@ -1,0 +1,51 @@
+---
+- name: Create backup directory
+  ansible.builtin.file:
+    path: "{{ ha_backup_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Install backup script
+  ansible.builtin.template:
+    src: ha-stack-backup.sh.j2
+    dest: /usr/local/sbin/ha-stack-backup
+    mode: "0755"
+
+- name: Install backup systemd units
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.name }}"
+    content: "{{ item.content }}"
+    mode: "0644"
+  loop:
+    - name: ha-stack-backup.service
+      content: |
+        [Unit]
+        Description=Back up the Home Assistant stack
+        After=docker.service
+
+        [Service]
+        Type=oneshot
+        Nice=10
+        IOSchedulingClass=idle
+        ExecStart=/usr/local/sbin/ha-stack-backup
+    - name: ha-stack-backup.timer
+      content: |
+        [Unit]
+        Description=Daily Home Assistant stack backup
+
+        [Timer]
+        OnCalendar={{ ha_backup_on_calendar }}
+        RandomizedDelaySec=15m
+        Persistent=true
+
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Enable backup timer
+  ansible.builtin.systemd_service:
+    name: ha-stack-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true

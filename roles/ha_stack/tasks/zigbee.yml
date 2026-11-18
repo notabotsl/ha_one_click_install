@@ -1,0 +1,49 @@
+---
+- name: Look for USB serial devices
+  ansible.builtin.find:
+    paths: /dev/serial/by-id
+    file_type: link
+  register: _serial_devices
+
+- name: Pick Zigbee coordinator
+  ansible.builtin.set_fact:
+    ha_zigbee_device: >-
+      {{ zigbee_device if zigbee_device | length > 0
+         else (_serial_devices.files | map(attribute='path') | sort
+               | select('search', zigbee_device_regex) | first | default('')) }}
+
+- name: Guess Zigbee adapter type
+  ansible.builtin.set_fact:
+    ha_zigbee_adapter: "{{ _adapter_guess | default('', true) | trim }}"
+  vars:
+    _adapter_guess: >-
+        {%- set d = ha_zigbee_device -%}
+        {%- if zigbee_adapter | length > 0 -%}{{ zigbee_adapter }}
+        {%- elif d is search('(?i)(_V2_|Dongle-E|Dongle_E|Nabu_Casa|SkyConnect|ZBT|EFR32|SLZB-07|MG2[14])') -%}ember
+        {%- elif d is search('(?i)(conbee|raspbee|dresden)') -%}deconz
+        {%- elif d is search('(?i)zigate') -%}zigate
+        {%- elif d is search('(?i)(Dongle_Plus|Dongle-P|Texas_Instruments|CC26|CC13|SLZB-06|TubesZB)') -%}zstack
+        {%- endif -%}
+
+- name: Decide whether to deploy Zigbee2MQTT
+  ansible.builtin.set_fact:
+    ha_z2m_enabled: >-
+      {{ (ha_zigbee2mqtt_enabled | string | lower) not in ['false', 'no', 'off', '0']
+         and ha_zigbee_device | length > 0 }}
+
+- name: Fail when Zigbee2MQTT is forced on but no coordinator was found
+  ansible.builtin.fail:
+    msg: >-
+      ha_zigbee2mqtt_enabled is true but no Zigbee coordinator was found in
+      /dev/serial/by-id. Plug it in, or set zigbee_device explicitly.
+  when:
+    - (ha_zigbee2mqtt_enabled | string | lower) in ['true', 'yes', 'on', '1']
+    - not ha_z2m_enabled | bool
+
+- name: Zigbee detection result
+  ansible.builtin.debug:
+    msg: >-
+      {{ ('Zigbee coordinator: ' ~ ha_zigbee_device ~ ' (adapter: '
+          ~ (ha_zigbee_adapter or 'auto') ~ ')')
+         if ha_z2m_enabled | bool else
+         'No Zigbee coordinator found - Zigbee2MQTT will not be deployed. Plug one in and run: sudo ha-stack reconfigure' }}

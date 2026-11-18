@@ -1,0 +1,54 @@
+---
+- name: Create Mosquitto directories
+  ansible.builtin.file:
+    path: "{{ ha_stack_dir }}/mosquitto/{{ item }}"
+    state: directory
+    owner: "1883"
+    group: "1883"
+    mode: "0750"
+  loop: [config, data, log]
+
+- name: Write Mosquitto config
+  ansible.builtin.template:
+    src: mosquitto.conf.j2
+    dest: "{{ ha_stack_dir }}/mosquitto/config/mosquitto.conf"
+    owner: "1883"
+    group: "1883"
+    mode: "0640"
+  notify: Restart mosquitto
+
+- name: Write plain-text MQTT user list (source for the hashed password file)
+  ansible.builtin.copy:
+    dest: "{{ ha_stack_dir }}/secrets/mosquitto.passwd.plain"
+    content: "{{ ha_mqtt_user }}:{{ ha_secrets.mqtt_password }}\n"
+    mode: "0600"
+  register: _mqtt_plain
+  no_log: true
+
+- name: Check for hashed Mosquitto password file
+  ansible.builtin.stat:
+    path: "{{ ha_stack_dir }}/mosquitto/config/passwd"
+  register: _mqtt_passwd
+
+- name: Hash Mosquitto password file
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - -v
+      - "{{ ha_stack_dir }}/secrets/mosquitto.passwd.plain:/plain:ro"
+      - -v
+      - "{{ ha_stack_dir }}/mosquitto/config:/mosquitto/config"
+      - --entrypoint
+      - sh
+      - "{{ ha_image_mosquitto }}"
+      - -c
+      - >-
+        cp /plain /mosquitto/config/passwd
+        && chmod 0600 /mosquitto/config/passwd
+        && mosquitto_passwd -U /mosquitto/config/passwd
+        && chown 1883:1883 /mosquitto/config/passwd
+  when: _mqtt_plain is changed or not _mqtt_passwd.stat.exists
+  changed_when: true
+  notify: Restart mosquitto

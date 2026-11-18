@@ -1,0 +1,7 @@
+---
+# Used by install.sh: configure the machine the playbook runs on.
+ha_hosts:
+  hosts:
+    localhost:
+      ansible_connection: local
+      ansible_python_interpreter: /usr/bin/python3

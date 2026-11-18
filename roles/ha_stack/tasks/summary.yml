@@ -1,0 +1,24 @@
+---
+- name: Installation summary
+  ansible.builtin.debug:
+    msg: "{{ _lines | select | list }}"
+  vars:
+    _ip: "{{ ansible_default_ipv4.address | default('localhost') }}"
+    _lines:
+      - "Home Assistant   http://{{ _ip }}:8123  -> create your owner account in the browser"
+      - "{{ ('MQTT broker      ' ~ _ip ~ ':' ~ ha_port_mqtt ~ '  user: ' ~ ha_mqtt_user) if ha_mosquitto_enabled | bool else '' }}"
+      - "{{ ('Zigbee2MQTT      http://' ~ _ip ~ ':' ~ ha_port_zigbee2mqtt ~ '  (' ~ ha_zigbee_device | basename ~ ')') if ha_z2m_enabled | bool else 'Zigbee2MQTT      not deployed (no coordinator found)' }}"
+      - "{{ ('Node-RED         http://' ~ _ip ~ ':' ~ ha_port_nodered ~ '  user: ' ~ ha_admin_user) if ha_nodered_enabled | bool else '' }}"
+      - "{{ ('ESPHome          http://' ~ _ip ~ ':6052  user: ' ~ ha_admin_user) if ha_esphome_enabled | bool else '' }}"
+      - "{{ ('Matter server    ws://' ~ _ip ~ ':5580/ws') if ha_matter_enabled | bool else '' }}"
+      - "{{ ('code-server      https://' ~ _ip ~ ':' ~ ha_port_codeserver) if ha_codeserver_enabled | bool else '' }}"
+      - ""
+      - "Passwords:        sudo ha-stack credentials"
+      - "Manage:           sudo ha-stack help"
+      - ""
+      - "Next steps in Home Assistant (Settings > Devices & services > Add integration):"
+      - "{{ ('  * MQTT: broker 127.0.0.1, port ' ~ ha_port_mqtt ~ ', user ' ~ ha_mqtt_user ~ ' + mqtt_password  (Zigbee devices appear automatically)') if ha_mosquitto_enabled | bool else '' }}"
+      - "{{ '  * ESPHome: devices are discovered automatically once flashed' if ha_esphome_enabled | bool else '' }}"
+      - "{{ '  * Matter: URL ws://127.0.0.1:5580/ws' if ha_matter_enabled | bool else '' }}"
+      - "{{ '  * HACS: add the HACS integration and link your GitHub account' if ha_hacs_enabled | bool else '' }}"
+      - "{{ '  * Node-RED: install the Home Assistant server node with a long-lived token, URL http://host.docker.internal:8123' if ha_nodered_enabled | bool else '' }}"

@@ -1,0 +1,18 @@
+name: lint
+on: [push, pull_request]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck install.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: ansible-lint
+        run: |
+          pip install ansible-core ansible-lint
+          ansible-galaxy collection install -r requirements.yml -p collections
+          ansible-lint
+          ansible-playbook site.yml --syntax-check

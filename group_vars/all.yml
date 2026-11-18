@@ -1,0 +1,76 @@
+---
+# =============================================================================
+# ha-stack settings.
+#
+# Override any of these in /etc/ha-stack/config.yml (created by install.sh),
+# in your inventory, or with `-e name=value`.
+# =============================================================================
+
+# --- General -----------------------------------------------------------------
+ha_stack_dir: /opt/ha-stack            # compose project, configs and data
+ha_stack_src_dir: /opt/ha-stack-installer  # where install.sh keeps this repo
+ha_timezone: ""                        # e.g. Europe/Madrid; empty = keep host timezone
+ha_admin_user: admin                   # login for Node-RED, ESPHome, Zigbee2MQTT UI
+ha_update_images: false                # true = pull newest images on this run
+
+# Set your own passwords instead of random ones (keys: mqtt_password,
+# nodered_password, nodered_credential_secret, esphome_password,
+# codeserver_password, zigbee2mqtt_token). Generated ones are stored in
+# {{ ha_stack_dir }}/secrets/credentials.yml.
+ha_passwords: {}
+
+# --- Components --------------------------------------------------------------
+ha_mosquitto_enabled: true
+ha_zigbee2mqtt_enabled: auto           # auto (only if a coordinator is found) | true | false
+ha_nodered_enabled: true
+ha_esphome_enabled: true
+ha_matter_enabled: false               # needs working IPv6 on your LAN
+ha_codeserver_enabled: false           # VS Code in the browser to edit configs
+ha_hacs_enabled: true                  # Home Assistant Community Store
+
+# --- Images (pin tags here if you want reproducible installs) ---------------
+ha_image_homeassistant: ghcr.io/home-assistant/home-assistant:stable
+ha_image_mosquitto: eclipse-mosquitto:2
+ha_image_zigbee2mqtt: ghcr.io/koenkk/zigbee2mqtt:latest
+ha_image_nodered: nodered/node-red:latest
+ha_image_esphome: ghcr.io/esphome/esphome:stable
+ha_image_matter: ghcr.io/home-assistant-libs/python-matter-server:stable
+ha_image_codeserver: lscr.io/linuxserver/code-server:latest
+
+# --- Ports (Home Assistant 8123, ESPHome 6052 and Matter 5580 use host networking)
+ha_port_mqtt: 1883
+ha_port_zigbee2mqtt: 8080
+ha_port_nodered: 1880
+ha_port_codeserver: 8443
+
+# --- MQTT --------------------------------------------------------------------
+ha_mqtt_user: mqtt
+# Broker URL used by Zigbee2MQTT/Node-RED. Change it if you use an external broker
+# (and set ha_mosquitto_enabled: false).
+ha_mqtt_server: mqtt://mosquitto:1883
+
+# --- Zigbee ------------------------------------------------------------------
+zigbee_device: ""     # /dev/serial/by-id/... ; empty = autodetect
+zigbee_adapter: ""    # zstack | ember | deconz | zigate | zboss ; empty = guess from device name
+zigbee_channel: 15    # only used when the Zigbee network is first created
+# Regex used to autodetect coordinators in /dev/serial/by-id
+zigbee_device_regex: "(?i)(zigbee|sonoff|itead|conbee|raspbee|dresden|texas_instruments|cc26|cc13|cc2531|efr32|slzb|smlight|skyconnect|nabu_casa|zbt|zbdongle|tubeszb|zigate|silicon_labs|ezsp)"
+
+# --- Node-RED ----------------------------------------------------------------
+# Extra palette nodes installed into Node-RED on first deploy.
+ha_nodered_packages:
+  - node-red-contrib-home-assistant-websocket
+
+# --- Host tuning -------------------------------------------------------------
+ha_install_avahi: true                 # mDNS (<hostname>.local) on the host
+ha_disable_modemmanager: true          # ModemManager grabs USB serial sticks
+ha_unattended_upgrades: true           # automatic Debian security updates
+docker_manage_daemon_json: true        # log rotation for containers
+docker_log_max_size: 10m
+docker_log_max_file: 3
+
+# --- Backups -----------------------------------------------------------------
+ha_backup_enabled: true
+ha_backup_dir: /var/backups/ha-stack
+ha_backup_keep: 7
+ha_backup_on_calendar: "*-*-* 03:30:00"

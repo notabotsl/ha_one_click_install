@@ -1,0 +1,45 @@
+---
+- name: Create Node-RED data directory
+  ansible.builtin.file:
+    path: "{{ ha_stack_dir }}/nodered"
+    state: directory
+    owner: "1000"
+    group: "1000"
+    mode: "0755"
+
+# bcrypt hash of the admin password. The stored hash is reused while it still
+# matches the password, so settings.js only changes when the password does.
+- name: Compute Node-RED admin password hash
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import bcrypt, os, pathlib, sys
+        path = pathlib.Path(sys.argv[1])
+        pw = sys.stdin.read().encode()
+        old = path.read_text().strip() if path.exists() else ""
+        if old and bcrypt.checkpw(pw, old.encode()):
+            print(old); print("unchanged"); sys.exit(0)
+        new = bcrypt.hashpw(pw, bcrypt.gensalt(rounds=10, prefix=b"2a")).decode()
+        path.write_text(new + "\n"); os.chmod(path, 0o600)
+        print(new); print("changed")
+      - "{{ ha_stack_dir }}/secrets/nodered.hash"
+    stdin: "{{ ha_secrets.nodered_password }}"
+    stdin_add_newline: false
+  register: _nodered_hash
+  changed_when: _nodered_hash.stdout_lines[-1] == "changed"
+  check_mode: false
+  no_log: true
+
+- name: Write Node-RED settings
+  ansible.builtin.template:
+    src: nodered-settings.js.j2
+    dest: "{{ ha_stack_dir }}/nodered/settings.js"
+    owner: "1000"
+    group: "1000"
+    mode: "0600"
+  vars:
+    nodered_password_hash: "{{ _nodered_hash.stdout_lines[0] }}"
+  notify: Restart nodered
+  no_log: true

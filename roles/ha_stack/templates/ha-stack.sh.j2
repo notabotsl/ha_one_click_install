@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+# ha-stack: manage the Home Assistant docker compose stack.
+set -Eeuo pipefail
+
+STACK_DIR="{{ ha_stack_dir }}"
+SRC_DIR="{{ ha_stack_src_dir }}"
+
+[[ $EUID -eq 0 ]] || exec sudo "$0" "$@"
+
+compose() { docker compose --project-directory "$STACK_DIR" "$@"; }
+
+usage() {
+  cat <<'EOF'
+Usage: ha-stack <command> [args]
+
+  status                 Show containers
+  logs [service...]      Follow logs (e.g. ha-stack logs zigbee2mqtt)
+  restart [service...]   Restart all or some services
+  start | stop           Start / stop the whole stack
+  update                 Pull newer images and recreate containers
+  backup                 Run a backup now
+  credentials            Show generated passwords
+  reconfigure [opts]     Re-run the installer (opts as for install.sh, e.g. --with-matter)
+  shell [service]        Open a shell in a container (default: homeassistant)
+  config                 Edit /etc/ha-stack/config.yml
+EOF
+}
+
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  status|ps)    compose ps ;;
+  logs)         compose logs -f --tail=200 "$@" ;;
+  restart)      compose restart "$@" ;;
+  start|up)     compose up -d ;;
+  stop|down)    compose stop ;;
+  update)
+    compose pull
+    compose up -d --remove-orphans
+    docker image prune -f ;;
+  backup)
+    if [[ -x /usr/local/sbin/ha-stack-backup ]]; then /usr/local/sbin/ha-stack-backup
+    else echo "Backups are disabled (ha_backup_enabled: false)." >&2; exit 1; fi ;;
+  credentials|passwords)
+    cat "$STACK_DIR/secrets/credentials.yml" ;;
+  reconfigure)
+    if [[ -x "$SRC_DIR/install.sh" ]]; then exec "$SRC_DIR/install.sh" "$@"
+    else echo "Installer not found in $SRC_DIR (was this host provisioned remotely?)." >&2; exit 1; fi ;;
+  shell)        docker exec -it "${1:-homeassistant}" sh -c 'command -v bash >/dev/null && exec bash || exec sh' ;;
+  config)       "${EDITOR:-nano}" /etc/ha-stack/config.yml ;;
+  help|-h|--help) usage ;;
+  *)            usage >&2; exit 1 ;;
+esac

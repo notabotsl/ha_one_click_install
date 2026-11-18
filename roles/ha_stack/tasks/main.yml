@@ -1,0 +1,109 @@
+---
+- name: Create stack directories
+  ansible.builtin.file:
+    path: "{{ ha_stack_dir }}/{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.owner | default('root') }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop:
+    - { path: "" }
+    - { path: secrets, mode: "0700" }
+    - { path: homeassistant }
+    - { path: homeassistant/themes }
+    - { path: homeassistant/custom_components }
+  loop_control:
+    label: "{{ ha_stack_dir }}/{{ item.path }}"
+
+- name: Credentials
+  ansible.builtin.import_tasks: secrets.yml
+
+- name: Zigbee coordinator
+  ansible.builtin.import_tasks: zigbee.yml
+
+- name: Home Assistant
+  ansible.builtin.import_tasks: homeassistant.yml
+
+- name: Mosquitto
+  ansible.builtin.include_tasks: mosquitto.yml
+  when: ha_mosquitto_enabled | bool
+
+- name: Zigbee2MQTT
+  ansible.builtin.include_tasks: zigbee2mqtt.yml
+  when: ha_z2m_enabled | bool
+
+- name: Node-RED
+  ansible.builtin.include_tasks: nodered.yml
+  when: ha_nodered_enabled | bool
+
+- name: Service data directories
+  ansible.builtin.file:
+    path: "{{ ha_stack_dir }}/{{ item.path }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - { path: esphome, enabled: "{{ ha_esphome_enabled }}" }
+    - { path: matter, enabled: "{{ ha_matter_enabled }}" }
+    - { path: code-server, enabled: "{{ ha_codeserver_enabled }}" }
+  when: item.enabled | bool
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Service env files (passwords)
+  ansible.builtin.copy:
+    dest: "{{ ha_stack_dir }}/secrets/{{ item.name }}.env"
+    content: "{{ item.content }}"
+    mode: "0600"
+  loop:
+    - name: esphome
+      enabled: "{{ ha_esphome_enabled }}"
+      content: |
+        USERNAME={{ ha_admin_user }}
+        PASSWORD={{ ha_secrets.esphome_password }}
+    - name: code-server
+      enabled: "{{ ha_codeserver_enabled }}"
+      content: |
+        PASSWORD={{ ha_secrets.codeserver_password }}
+  when: item.enabled | bool
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true  # compose recreates the container when env_file contents change
+
+- name: Write compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ ha_stack_dir }}/compose.yml"
+    mode: "0644"
+    validate: docker compose --project-directory {{ ha_stack_dir }} -f %s config --quiet
+
+- name: Start the stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ ha_stack_dir }}"
+    state: present
+    pull: "{{ 'always' if ha_update_images | bool else 'missing' }}"
+    remove_orphans: true
+  register: _compose
+
+- name: Install Node-RED palette nodes
+  ansible.builtin.include_tasks: nodered_packages.yml
+  when:
+    - ha_nodered_enabled | bool
+    - ha_nodered_packages | length > 0
+
+- name: HACS
+  ansible.builtin.include_tasks: hacs.yml
+  when: ha_hacs_enabled | bool
+
+- name: Prune dangling images after an update
+  ansible.builtin.command: docker image prune -f
+  when: ha_update_images | bool and _compose is changed
+  changed_when: false
+
+- name: Install ha-stack management command
+  ansible.builtin.template:
+    src: ha-stack.sh.j2
+    dest: /usr/local/bin/ha-stack
+    mode: "0755"
+
+- name: Summary
+  ansible.builtin.import_tasks: summary.yml

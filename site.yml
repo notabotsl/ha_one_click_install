@@ -1,0 +1,14 @@
+---
+- name: Home Assistant one-click stack
+  hosts: ha_hosts
+  become: true
+  roles:
+    - role: base
+      tags: [base]
+    - role: docker
+      tags: [docker]
+    - role: ha_stack
+      tags: [stack]
+    - role: backup
+      tags: [backup]
+      when: ha_backup_enabled | bool

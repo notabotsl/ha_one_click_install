@@ -1,0 +1,33 @@
+---
+- name: Wait for Node-RED to initialise its data directory
+  ansible.builtin.wait_for:
+    path: "{{ ha_stack_dir }}/nodered/package.json"
+    timeout: 120
+
+- name: Check installed Node-RED palette nodes
+  ansible.builtin.stat:
+    path: "{{ ha_stack_dir }}/nodered/node_modules/{{ item }}/package.json"
+  loop: "{{ ha_nodered_packages }}"
+  register: _nodered_pkgs
+
+- name: Install missing Node-RED palette nodes
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - --workdir
+      - /data
+      - nodered
+      - npm
+      - install
+      - --no-audit
+      - --no-fund
+      - --omit=dev
+      - --save
+      - "{{ item.item }}"
+  loop: "{{ _nodered_pkgs.results }}"
+  when: not item.stat.exists
+  changed_when: true
+  loop_control:
+    label: "{{ item.item }}"
+  notify: Restart nodered

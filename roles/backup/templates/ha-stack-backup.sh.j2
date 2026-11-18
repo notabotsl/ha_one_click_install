@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+# Archives the whole stack directory (configs, data, secrets). The Home
+# Assistant SQLite database is copied with `sqlite3 .backup` so it is
+# consistent even while Home Assistant is running.
+#
+# Restore:  sudo ha-stack stop
+#           sudo tar -xzf <archive> -C {{ ha_stack_dir | dirname }}
+#           # if the archive contains home-assistant_v2.db at its root:
+#           sudo tar -xzf <archive> -C {{ ha_stack_dir }}/homeassistant home-assistant_v2.db
+#           sudo ha-stack start
+set -Eeuo pipefail
+
+STACK_DIR="{{ ha_stack_dir }}"
+DEST="{{ ha_backup_dir }}"
+KEEP="{{ ha_backup_keep }}"
+
+parent="$(dirname "$STACK_DIR")"
+name="$(basename "$STACK_DIR")"
+db="$STACK_DIR/homeassistant/home-assistant_v2.db"
+archive="$DEST/ha-stack-$(date +%Y%m%d-%H%M%S).tar.gz"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+mkdir -p "$DEST"
+chmod 700 "$DEST"
+
+tar_args=(
+  --exclude="$name/esphome/.esphome/build"
+  --exclude="$name/esphome/.esphome/platformio"
+  --exclude="$name/nodered/node_modules/.cache"
+)
+extra=()
+if [[ -f "$db" ]] && command -v sqlite3 >/dev/null; then
+  sqlite3 "$db" ".backup '$tmp/home-assistant_v2.db'"
+  tar_args+=(--exclude="$name/homeassistant/home-assistant_v2.db*")
+  extra=(-C "$tmp" home-assistant_v2.db)
+fi
+
+rc=0
+tar "${tar_args[@]}" --warning=no-file-changed -czf "$archive" -C "$parent" "$name" "${extra[@]}" || rc=$?
+# tar exit 1 = "some files changed while being read" (logs etc.) - acceptable
+if [[ $rc -gt 1 ]]; then
+  rm -f "$archive"
+  echo "Backup failed (tar exit $rc)" >&2
+  exit "$rc"
+fi
+chmod 600 "$archive"
+
+# Retention
+ls -1t "$DEST"/ha-stack-*.tar.gz 2>/dev/null | tail -n +"$((KEEP + 1))" | xargs -r -d '\n' rm -f --
+
+echo "Backup written: $archive ($(du -h "$archive" | cut -f1))"

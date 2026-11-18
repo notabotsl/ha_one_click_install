@@ -1,0 +1,24 @@
+---
+- name: Create Zigbee2MQTT data directory
+  ansible.builtin.file:
+    path: "{{ ha_stack_dir }}/zigbee2mqtt/data"
+    state: directory
+    mode: "0755"
+
+# Zigbee2MQTT rewrites configuration.yaml itself (it stores the generated
+# network key there), so it is only seeded once. Settings we manage
+# (MQTT, serial port, frontend) are injected via environment variables,
+# which override the file.
+- name: Seed Zigbee2MQTT configuration
+  ansible.builtin.template:
+    src: zigbee2mqtt.yaml.j2
+    dest: "{{ ha_stack_dir }}/zigbee2mqtt/data/configuration.yaml"
+    mode: "0644"
+    force: false
+
+- name: Write Zigbee2MQTT environment
+  ansible.builtin.template:
+    src: zigbee2mqtt.env.j2
+    dest: "{{ ha_stack_dir }}/secrets/zigbee2mqtt.env"
+    mode: "0600"
+  no_log: true

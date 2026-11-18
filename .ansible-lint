@@ -1,0 +1,10 @@
+---
+profile: production
+exclude_paths:
+  - collections/
+  - .github/
+  - roles/ha_stack/files/homeassistant/  # Home Assistant YAML uses custom !include tags
+skip_list:
+  - var-naming[no-role-prefix]  # shared, user-facing variables live in group_vars/all.yml
+warn_list:
+  - jinja[spacing]

@@ -1,0 +1,129 @@
+# {{ ansible_managed }}
+# Edit /etc/ha-stack/config.yml and run `sudo ha-stack reconfigure` instead.
+name: ha-stack
+
+services:
+  homeassistant:
+    image: {{ ha_image_homeassistant }}
+    container_name: homeassistant
+    restart: unless-stopped
+    network_mode: host          # needed for discovery (mDNS/SSDP/DHCP/Bluetooth)
+    privileged: true            # USB radios (Z-Wave, Bluetooth, Thread) "just work"
+    environment:
+      TZ: {{ ha_tz }}
+    volumes:
+      - ./homeassistant:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro
+{% if ha_mosquitto_enabled | bool %}
+    depends_on:
+      - mosquitto
+{% endif %}
+{% if ha_mosquitto_enabled | bool %}
+
+  mosquitto:
+    image: {{ ha_image_mosquitto }}
+    container_name: mosquitto
+    restart: unless-stopped
+    environment:
+      TZ: {{ ha_tz }}
+    ports:
+      - "{{ ha_port_mqtt }}:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    networks: [ha]
+{% endif %}
+{% if ha_z2m_enabled | bool %}
+
+  zigbee2mqtt:
+    image: {{ ha_image_zigbee2mqtt }}
+    container_name: zigbee2mqtt
+    restart: unless-stopped
+    env_file: ./secrets/zigbee2mqtt.env
+    ports:
+      - "{{ ha_port_zigbee2mqtt }}:8080"
+    volumes:
+      - ./zigbee2mqtt/data:/app/data
+      - /run/udev:/run/udev:ro
+    devices:
+      - "{{ ha_zigbee_device }}:/dev/zigbee"
+    group_add:
+      - dialout
+    networks: [ha]
+{% if ha_mosquitto_enabled | bool %}
+    depends_on:
+      - mosquitto
+{% endif %}
+{% endif %}
+{% if ha_nodered_enabled | bool %}
+
+  nodered:
+    image: {{ ha_image_nodered }}
+    container_name: nodered
+    restart: unless-stopped
+    environment:
+      TZ: {{ ha_tz }}
+    ports:
+      - "{{ ha_port_nodered }}:1880"
+    volumes:
+      - ./nodered:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach Home Assistant on the host
+    networks: [ha]
+{% endif %}
+{% if ha_esphome_enabled | bool %}
+
+  esphome:
+    image: {{ ha_image_esphome }}
+    container_name: esphome
+    restart: unless-stopped
+    network_mode: host          # mDNS to find/flash devices; UI on :6052
+    env_file: ./secrets/esphome.env
+    environment:
+      TZ: {{ ha_tz }}
+      ESPHOME_DASHBOARD_USE_PING: "true"
+    volumes:
+      - ./esphome:/config
+      - /etc/localtime:/etc/localtime:ro
+{% endif %}
+{% if ha_matter_enabled | bool %}
+
+  matter-server:
+    image: {{ ha_image_matter }}
+    container_name: matter-server
+    restart: unless-stopped
+    network_mode: host          # Matter needs IPv6 link-local multicast
+    security_opt:
+      - apparmor:unconfined
+    command: --storage-path /data --paa-root-cert-dir /data/credentials
+    volumes:
+      - ./matter:/data
+      - /run/dbus:/run/dbus:ro
+{% endif %}
+{% if ha_codeserver_enabled | bool %}
+
+  code-server:
+    image: {{ ha_image_codeserver }}
+    container_name: code-server
+    restart: unless-stopped
+    env_file: ./secrets/code-server.env
+    environment:
+      PUID: "0"
+      PGID: "0"
+      TZ: {{ ha_tz }}
+      DEFAULT_WORKSPACE: /config/workspace
+    ports:
+      - "{{ ha_port_codeserver }}:8443"
+    volumes:
+      - ./code-server:/config
+      - ./homeassistant:/config/workspace/homeassistant
+{% if ha_esphome_enabled | bool %}
+      - ./esphome:/config/workspace/esphome
+{% endif %}
+{% endif %}
+
+networks:
+  ha:
+    name: ha-stack

@@ -1,0 +1,91 @@
+---
+- name: Check that the target is supported
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == "Debian"
+      - >-
+        (ansible_distribution == "Ubuntu" and ansible_distribution_major_version | int >= 22)
+        or (ansible_distribution != "Ubuntu" and ansible_distribution_major_version | int >= 12)
+      - ansible_architecture in ["x86_64", "aarch64"]
+    fail_msg: >-
+      Unsupported system {{ ansible_distribution }} {{ ansible_distribution_version }}
+      ({{ ansible_architecture }}). Debian 12+/Ubuntu 22.04+ on amd64 or arm64 is required.
+    quiet: true
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - jq
+      - unzip
+      - sqlite3
+      - usbutils
+      - dbus
+      - bluez
+      - python3-bcrypt
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install Avahi (mDNS)
+  ansible.builtin.apt:
+    name: [avahi-daemon, libnss-mdns]
+    state: present
+  when: ha_install_avahi | bool
+
+- name: Enable automatic security updates
+  when: ha_unattended_upgrades | bool
+  block:
+    - name: Install unattended-upgrades
+      ansible.builtin.apt:
+        name: [unattended-upgrades, apt-listchanges]
+        state: present
+
+    - name: Turn on periodic unattended upgrades
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+        mode: "0644"
+
+- name: Enable Bluetooth service
+  ansible.builtin.systemd_service:
+    name: bluetooth
+    enabled: true
+    state: started
+  failed_when: false  # no adapter / VM: not fatal
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ ha_timezone }}"
+  when: ha_timezone | length > 0
+
+- name: Read effective host timezone
+  ansible.builtin.command: timedatectl show --property=Timezone --value
+  register: _host_tz
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Remember timezone for containers
+  ansible.builtin.set_fact:
+    ha_tz: >-
+      {{ ha_timezone if ha_timezone | length > 0
+         else (_host_tz.stdout | trim if (_host_tz.rc | default(1)) == 0 and _host_tz.stdout | trim | length > 0
+               else 'Etc/UTC') }}
+
+- name: Gather service facts
+  ansible.builtin.service_facts:
+
+- name: Stop ModemManager (it probes and blocks USB serial Zigbee/Z-Wave sticks)
+  ansible.builtin.systemd_service:
+    name: ModemManager
+    state: stopped
+    enabled: false
+    masked: true
+  when:
+    - ha_disable_modemmanager | bool
+    - "'ModemManager.service' in ansible_facts.services"

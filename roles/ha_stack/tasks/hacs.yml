@@ -1,0 +1,21 @@
+---
+- name: Check for HACS
+  ansible.builtin.stat:
+    path: "{{ ha_stack_dir }}/homeassistant/custom_components/hacs/manifest.json"
+  register: _hacs
+
+- name: Install HACS
+  when: not _hacs.stat.exists
+  block:
+    - name: Create HACS directory
+      ansible.builtin.file:
+        path: "{{ ha_stack_dir }}/homeassistant/custom_components/hacs"
+        state: directory
+        mode: "0755"
+
+    - name: Download and unpack latest HACS release
+      ansible.builtin.unarchive:
+        src: https://github.com/hacs/integration/releases/latest/download/hacs.zip
+        dest: "{{ ha_stack_dir }}/homeassistant/custom_components/hacs"
+        remote_src: true
+      notify: Restart homeassistant

@@ -1,0 +1,36 @@
+// {{ ansible_managed }}
+// Edit group_vars / /etc/ha-stack/config.yml instead and run `sudo ha-stack reconfigure`.
+// Full reference: https://nodered.org/docs/user-guide/runtime/settings-file
+module.exports = {
+    flowFile: "flows.json",
+    flowFilePretty: true,
+    credentialSecret: {{ ha_secrets.nodered_credential_secret | to_json }},
+    uiPort: process.env.PORT || 1880,
+
+    adminAuth: {
+        type: "credentials",
+        users: [{
+            username: {{ ha_admin_user | to_json }},
+            password: {{ nodered_password_hash | to_json }},
+            permissions: "*"
+        }]
+    },
+
+    diagnostics: { enabled: true, ui: true },
+    runtimeState: { enabled: false, ui: false },
+    logging: { console: { level: "info", metrics: false, audit: false } },
+    exportGlobalContextKeys: false,
+    externalModules: {},
+    functionExternalModules: true,
+    functionTimeout: 0,
+    functionGlobalContext: {},
+    contextStorage: {
+        default: "memory",
+        memory: { module: "memory" },
+        file: { module: "localfilesystem" }
+    },
+    editorTheme: {
+        projects: { enabled: false },
+        codeEditor: { lib: "monaco" }
+    }
+};

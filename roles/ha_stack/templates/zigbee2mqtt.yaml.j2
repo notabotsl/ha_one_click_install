@@ -1,0 +1,23 @@
+# Seeded by ha-stack on first install. Zigbee2MQTT owns this file from now on.
+# MQTT credentials, serial port and frontend settings are set through
+# {{ ha_stack_dir }}/secrets/zigbee2mqtt.env and override the values here.
+version: 5
+homeassistant:
+  enabled: true
+frontend:
+  enabled: true
+  port: 8080
+mqtt:
+  base_topic: zigbee2mqtt
+  server: {{ ha_mqtt_server }}
+serial:
+  port: /dev/zigbee
+{% if ha_zigbee_adapter | length > 0 %}
+  adapter: {{ ha_zigbee_adapter }}
+{% endif %}
+advanced:
+  channel: {{ zigbee_channel }}
+  network_key: GENERATE
+  pan_id: GENERATE
+  ext_pan_id: GENERATE
+  log_level: info

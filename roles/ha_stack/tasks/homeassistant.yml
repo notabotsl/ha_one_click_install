@@ -1,0 +1,15 @@
+---
+# Seed files are only written when missing, so your edits in the Home
+# Assistant config directory are never overwritten.
+- name: Seed Home Assistant configuration
+  ansible.builtin.copy:
+    src: "homeassistant/{{ item }}"
+    dest: "{{ ha_stack_dir }}/homeassistant/{{ item }}"
+    mode: "0644"
+    force: false
+  loop:
+    - configuration.yaml
+    - automations.yaml
+    - scripts.yaml
+    - scenes.yaml
+    - secrets.yaml

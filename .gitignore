@@ -1,0 +1,4 @@
+collections/
+.venv/
+inventory/remote.yml
+*.retry

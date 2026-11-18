@@ -1,0 +1,12 @@
+---
+# Copy to inventory/remote.yml and run from your workstation:
+#   ansible-galaxy collection install -r requirements.yml -p collections
+#   ansible-playbook -i inventory/remote.yml site.yml -K
+ha_hosts:
+  hosts:
+    homeassistant:
+      ansible_host: 192.168.1.50
+      ansible_user: debian
+      # Any variable from group_vars/all.yml can be set per host:
+      # ha_timezone: Europe/Madrid
+      # zigbee_device: /dev/serial/by-id/usb-ITead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_V2_xxxx-if00-port0
